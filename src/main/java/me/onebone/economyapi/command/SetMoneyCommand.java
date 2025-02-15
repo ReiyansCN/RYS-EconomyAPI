@@ -68,6 +68,9 @@ public class SetMoneyCommand extends Command {
         double amount = 0;
         try {
             amount = Double.parseDouble(args[1]);
+            if (!Double.isFinite(amount)) {
+                throw new NumberFormatException();
+            }
         } catch (NumberFormatException e) {
             sender.sendMessage(EconomyAPI.getI18n().tr(langCode, "setmoney-invalid-number", amount, plugin.getMonetaryUnit()));
             return true;

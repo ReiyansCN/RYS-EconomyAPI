@@ -79,6 +79,9 @@ public class PayCommand extends Command {
         double amount;
         try {
             amount = Double.parseDouble(args[1]);
+            if (!Double.isFinite(amount)) {
+                throw new NumberFormatException();
+            }
         } catch (NumberFormatException e) {
             sender.sendMessage(EconomyAPI.getI18n().tr(langCode, "takemoney-must-be-number"));
             return true;
