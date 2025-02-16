@@ -41,6 +41,8 @@ import me.onebone.economyapi.provider.YamlProvider;
 import me.onebone.economyapi.task.AutoSaveTask;
 
 import java.lang.reflect.InvocationTargetException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.text.DecimalFormat;
 import java.util.*;
 
@@ -648,7 +650,7 @@ public class EconomyAPI extends PluginBase implements Listener {
 
     @Override
     public void onEnable() {
-        if (EconomyAPI.getInstance().getConfig() != null &&
+        if (Files.exists(Path.of(getDataFolder().toString(), "config.yml")) &&
                 UpgradeConfig.tryUpgradeConfigVersion(EconomyAPI.getInstance().getConfig().getInt("version", 1))) {
             if (updateDoubleConfirmation()) {
                 MAIN_CONFIG = new EconomyAPIConfig();
