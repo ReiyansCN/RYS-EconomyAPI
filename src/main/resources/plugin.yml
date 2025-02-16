@@ -1,8 +1,8 @@
-name: "${project.artifactId}"
+name: EconomyAPI
 version: "${project.version}"
 author: onebone
 api: ["1.0.13"]
-main: "${project.groupId}"
+main: me.onebone.economyapi.EconomyAPI
 
 softdepend:
   - "EasySQLX"
