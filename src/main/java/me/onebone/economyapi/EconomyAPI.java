@@ -35,6 +35,7 @@ import me.onebone.economyapi.event.account.CreateAccountEvent;
 import me.onebone.economyapi.event.money.AddMoneyEvent;
 import me.onebone.economyapi.event.money.ReduceMoneyEvent;
 import me.onebone.economyapi.event.money.SetMoneyEvent;
+import me.onebone.economyapi.provider.MySQLProvider;
 import me.onebone.economyapi.provider.Provider;
 import me.onebone.economyapi.provider.SQLiteProvider;
 import me.onebone.economyapi.provider.YamlProvider;
@@ -60,8 +61,9 @@ public class EconomyAPI extends PluginBase implements Listener {
     private static EconomyAPI instance;
     private static PluginI18n i18n;
     public static LangCode serverLangCode;
-    private Provider provider;
-    private final HashMap<String, Class<?>> providerClass = new HashMap<>();
+    protected Provider provider;
+    protected final HashMap<String, Class<?>> providerClass = new HashMap<>();
+    protected static AsyncOperator asyncOperator = new AsyncOperator();
 
     static {
         MONEY_FORMAT.setMaximumFractionDigits(2);
@@ -391,7 +393,7 @@ public class EconomyAPI extends PluginBase implements Listener {
     }
 
     private double myMoneyInternal(String id, String currencyName) {
-        return this.provider.getMoney(id.toLowerCase(), currencyName);
+        return this.provider.getMoney(currencyName, id.toLowerCase());
     }
 
     public int setMoney(Player player, double amount, String currencyName) {
@@ -437,7 +439,7 @@ public class EconomyAPI extends PluginBase implements Listener {
         SetMoneyEvent event = new SetMoneyEvent(id, amount, currencyName);
         this.getServer().getPluginManager().callEvent(event);
         if (!event.isCancelled() || force) {
-            if (this.provider.accountExists(id, currencyName)) {
+            if (this.provider.accountExists(currencyName, id)) {
                 amount = event.getAmount();
                 if (amount <= getMaxMoney(currencyName)) {
                     this.provider.setMoney(currencyName, id, amount);
@@ -643,8 +645,9 @@ public class EconomyAPI extends PluginBase implements Listener {
         this.addProvider("yaml", YamlProvider.class);
         if (this.getServer().getPluginManager().getPlugin("EasySQLX") != null) {
             this.addProvider("sqlite", SQLiteProvider.class);
+            this.addProvider("mysql", MySQLProvider.class);
         } else {
-            this.getLogger().warning("EasySQLX is not found, SQLite provider will not be available.");
+            this.getLogger().warning("EasySQLX is not found, SQLite and MySQL provider will not be available.");
         }
     }
 
@@ -682,6 +685,9 @@ public class EconomyAPI extends PluginBase implements Listener {
     @Override
     public void onDisable() {
         this.saveAll();
+        if (MAIN_CONFIG.getProvider().equals("mysql")) {
+            provider.close();
+        }
     }
 
     private boolean initialize() {
@@ -727,6 +733,19 @@ public class EconomyAPI extends PluginBase implements Listener {
         return true;
     }
 
+    /**
+     * Gets the async operator for economy operations.
+     *
+     * @return AsyncOperator instance for performing asynchronous economy operations
+     * @example <pre>
+     * EconomyAPI.getAsyncOperator().myMoney(player).thenAccept(money -> {
+     *     player.sendMessage("Your balance: " + money);
+     * });
+     * </pre>
+     */
+    public static AsyncOperator getAsyncOperator() {
+        return asyncOperator;
+    }
 
     private void checkAndConvertLegacy(UUID uuid) {
         IPlayer player = getServer().getOfflinePlayer(uuid);
