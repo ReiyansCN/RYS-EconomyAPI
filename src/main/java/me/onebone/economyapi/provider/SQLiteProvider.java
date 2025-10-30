@@ -197,10 +197,10 @@ public class SQLiteProvider implements Provider {
     }
 
     public static class MoneyData {
-        private long id;
-        private String player;
-        private double money;
-        private String currency;
+        public long id;
+        public String player;
+        public double money;
+        public String currency;
 
         public MoneyData() {
             //SQLiteHelper创建类需要无参数的构造方法
@@ -211,6 +211,7 @@ public class SQLiteProvider implements Provider {
             this.money = money;
         }
 
+        public void setId(long id){this.id = id;}
         public long getId() {
             return id;
         }
