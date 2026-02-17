@@ -121,6 +121,7 @@ public class EconomyAPI extends PluginBase implements Listener {
     }
 
     private boolean createAccountInternal(String id, double defaultMoney, boolean force) {
+        id = id.toLowerCase();
         CreateAccountEvent event = new CreateAccountEvent(id, defaultMoney);
         this.getServer().getPluginManager().callEvent(event);
         if (!event.isCancelled() || force) {
@@ -354,7 +355,7 @@ public class EconomyAPI extends PluginBase implements Listener {
     }
 
     public boolean hasAccount(String id) {
-        return provider.accountExists(checkAndConvertLegacy(id).map(UUID::toString).map(String::toLowerCase).orElse(id));
+        return provider.accountExists(checkAndConvertLegacy(id).map(UUID::toString).map(String::toLowerCase).orElse(id.toLowerCase()));
     }
 
     public String getMonetaryUnit() {
@@ -607,6 +608,7 @@ public class EconomyAPI extends PluginBase implements Listener {
     }
 
     private boolean createAccountInternal(String id, double defaultMoney, String currencyName, boolean force) {
+        id = id.toLowerCase();
         CreateAccountEvent event = new CreateAccountEvent(id, defaultMoney, currencyName);
         this.getServer().getPluginManager().callEvent(event);
         if (!event.isCancelled() || force) {

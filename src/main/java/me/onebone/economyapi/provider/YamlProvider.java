@@ -22,11 +22,11 @@ public class YamlProvider implements Provider {
                     .computeIfAbsent("money", s -> new LinkedHashMap<>());
             temp.forEach((username, money) -> {
                 if (money instanceof Integer) {
-                    file.set(username, ((Integer) money).doubleValue());
+                    file.set("money." + username, ((Integer) money).doubleValue());
                 } else if (money instanceof Double) {
-                    file.set(username, money);
+                    file.set("money." + username, money);
                 } else if (money instanceof String) {
-                    file.set(username, Double.parseDouble(money.toString()));
+                    file.set("money." + username, Double.parseDouble(money.toString()));
                 }
             });
             file.save();
@@ -97,7 +97,7 @@ public class YamlProvider implements Provider {
             return false;
         }
         currenciesData.get(currencyName).set("money." + id, amount);
-        return false;
+        return true;
     }
 
     @Override
