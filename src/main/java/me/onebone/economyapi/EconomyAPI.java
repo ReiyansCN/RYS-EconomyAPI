@@ -22,6 +22,7 @@ import cn.nukkit.IPlayer;
 import cn.nukkit.Player;
 import cn.nukkit.Server;
 import cn.nukkit.event.EventHandler;
+import cn.nukkit.event.EventPriority;
 import cn.nukkit.event.Listener;
 import cn.nukkit.event.player.PlayerJoinEvent;
 import cn.nukkit.lang.LangCode;
@@ -683,7 +684,7 @@ public class EconomyAPI extends PluginBase implements Listener {
         }
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.LOWEST)
     public void onJoin(PlayerJoinEvent event) {
         this.createAccount(event.getPlayer());
     }
