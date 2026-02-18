@@ -74,8 +74,11 @@ public class SQLiteProvider implements Provider {
         if (!accountExists(currencyName, id)) {
             return false;
         }
-        this.sqLiteHelper.remove(TABLE_NAME, COLUMN_PLAYER, id); // 移除账户时使用 player 作为 key，currency 通过 MoneyData 对象内部 currency 字段区分
-        this.cache.remove(getCacheKey(currencyName, id)); // 从缓存中移除
+        MoneyData moneyData = this.getMoneyData(currencyName, id);
+        if (moneyData != null) {
+            this.sqLiteHelper.remove(TABLE_NAME, (int) moneyData.getId());
+        }
+        this.cache.remove(getCacheKey(currencyName, id));
         return true;
     }
 
@@ -108,8 +111,8 @@ public class SQLiteProvider implements Provider {
         }
         MoneyData moneyData = this.getMoneyData(currencyName, id);
         moneyData.setMoney(amount);
-        this.sqLiteHelper.set(TABLE_NAME, COLUMN_PLAYER, id, moneyData); // 使用 player 作为 key 更新，MoneyData 对象内部包含 currency 信息
-        this.cache.put(getCacheKey(currencyName, id), moneyData); // 更新缓存
+        this.sqLiteHelper.set(TABLE_NAME, COLUMN_ID, String.valueOf(moneyData.getId()), moneyData);
+        this.cache.put(getCacheKey(currencyName, id), moneyData);
         return true;
     }
 

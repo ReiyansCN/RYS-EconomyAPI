@@ -50,12 +50,20 @@ public class EconomyAPIConfig {
 
     // 获取默认货币
     public Currency getDefaultCurrency() {
-        return currencies.get(defaultCurrency);
+        Currency currency = currencies.get(defaultCurrency);
+        if (currency == null) {
+            throw new IllegalStateException("Default currency '" + defaultCurrency + "' not found in config. Check 'data.default-currency' and 'currencies' in config.yml.");
+        }
+        return currency;
     }
 
     // 获取特定货币的信息
     public Currency getCurrency(String name) {
-        return currencies.get(name);
+        Currency currency = currencies.get(name);
+        if (currency == null) {
+            throw new IllegalArgumentException("Currency '" + name + "' not found in config. Available currencies: " + currencies.keySet());
+        }
+        return currency;
     }
 
     // 获取货币种类列表
@@ -63,9 +71,9 @@ public class EconomyAPIConfig {
         return currencies.keySet().stream().toList();
     }
 
-    // 获取auto-save-interval
+    // 获取auto-save-interval（单位：分钟）
     public int getAutoSaveInterval() {
-        return autoSaveInterval * 1200;
+        return autoSaveInterval;
     }
 
     // 获取provider

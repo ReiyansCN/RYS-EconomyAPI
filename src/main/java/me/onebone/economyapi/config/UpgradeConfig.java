@@ -51,8 +51,9 @@ public class UpgradeConfig {
         if (new Scanner(System.in).nextLine().toLowerCase().startsWith("y")) {
             System.out.println("User confirmed the upgrade. Starting the upgrade process...");
         } else {
-            System.out.println("The plugin version is too high and does not support this configuration file. Please use version 2.0.6 of EconomyAPI!");
-            System.exit(1);
+            EconomyAPI.getInstance().getLogger().warning("The plugin version is too high and does not support this configuration file. Please use version 2.0.6 of EconomyAPI!");
+            EconomyAPI.getInstance().getServer().getPluginManager().disablePlugin(EconomyAPI.getInstance());
+            return false;
         }
 
         EconomyAPI.getInstance().saveDefaultConfig();
@@ -104,46 +105,52 @@ public class UpgradeConfig {
             EconomyAPI.getInstance().getLogger().info("SQLite is not enabled, no upgrade is required.");
             return false;
         }
-        Path sourceFile = Paths.get(EconomyAPI.getInstance().getDataFolder().toString(), "MoneyV3.db");
-        Path targetFile = Paths.get(EconomyAPI.getInstance().getDataFolder().toString(), "Money.db.old");
-        try {
-            Files.move(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException ignored) {
-        }
+        String dataFolder = EconomyAPI.getInstance().getDataFolder().getAbsolutePath();
+        Path sourceFile = Paths.get(dataFolder, "MoneyV3.db");
+        Path backupFile = Paths.get(dataFolder, "MoneyV3.db.old");
+
         if (!Files.exists(sourceFile)) {
             EconomyAPI.getInstance().getLogger().warning("MoneyV3.db file not found.");
             return false;
         }
+
+        try {
+            Files.move(sourceFile, backupFile, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            EconomyAPI.getInstance().getLogger().warning("Failed to backup MoneyV3.db.", e);
+            return false;
+        }
+
         String TABLE_NAME = "Money";
         try {
-            SQLiteHelper oldSQLiteHelper = new SQLiteHelper(EconomyAPI.getInstance().getDataFolder().getAbsolutePath() + File.separator + "Money.old.db");
+            SQLiteHelper oldSQLiteHelper = new SQLiteHelper(backupFile.toAbsolutePath().toString());
             if (!oldSQLiteHelper.exists(TABLE_NAME)) {
-                System.out.println("Old data table 'Money' not found in Money.old.db, data migration skipped.");
+                EconomyAPI.getInstance().getLogger().warning("Old data table 'Money' not found in MoneyV3.db.old, data migration skipped.");
                 return false;
             }
             List<OldMoneyData> oldMoneyDataList = oldSQLiteHelper.getAll(TABLE_NAME, OldMoneyData.class);
             if (oldMoneyDataList == null) {
-                System.out.println("Failed to read data from 'Money' table in Money.old.db, data migration aborted.");
+                EconomyAPI.getInstance().getLogger().warning("Failed to read data from 'Money' table, data migration aborted.");
                 return false;
             }
-            SQLiteHelper sqLiteHelper = new SQLiteHelper(EconomyAPI.getInstance().getDataFolder().getAbsolutePath() + File.separator + "MoneyV3.db");
+            SQLiteHelper sqLiteHelper = new SQLiteHelper(dataFolder + File.separator + "MoneyV3.db");
             if (!sqLiteHelper.exists(TABLE_NAME)) {
                 sqLiteHelper.addTable(TABLE_NAME, SQLiteHelper.DBTable.asDbTable(SQLiteProvider.MoneyData.class));
             }
             for (OldMoneyData data : oldMoneyDataList) {
-                // 将 OldMoneyData 转换为 MoneyData
                 SQLiteProvider.MoneyData moneyData = new SQLiteProvider.MoneyData(data.getPlayer(), data.getMoney());
                 moneyData.setCurrency(EconomyAPI.MAIN_CONFIG.getDefaultCurrency().getName());
-
-                sqLiteHelper.add(TABLE_NAME, moneyData); // 插入新的 MoneyData 对象
+                sqLiteHelper.add(TABLE_NAME, moneyData);
             }
-            System.out.println("SQLite data migration complete!"); // 添加迁移完成的提示
+            oldSQLiteHelper.close();
+            sqLiteHelper.close();
+            EconomyAPI.getInstance().getLogger().info("SQLite data migration complete!");
             return true;
         } catch (ClassNotFoundException e) {
             EconomyAPI.getInstance().getLogger().warning("Failed to upgrade MoneyV3.db data, runtime error.", e);
             return false;
         } catch (SQLException e) {
-            EconomyAPI.getInstance().getLogger().warning("Failed to upgrade Money.yml data, sql exception.", e);
+            EconomyAPI.getInstance().getLogger().warning("Failed to upgrade MoneyV3.db data, sql exception.", e);
             return false;
         }
     }

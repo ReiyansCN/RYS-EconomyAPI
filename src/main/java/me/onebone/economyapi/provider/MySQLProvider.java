@@ -117,7 +117,7 @@ public class MySQLProvider implements Provider {
     public boolean createAccount(String currencyName, String id, double defaultMoney) {
         if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return false;
         // convert money to bigint
-        long money = (long) defaultMoney * 100;
+        long money = (long) (defaultMoney * 100);
         if (!accountExists(currencyName, id)) {
             SqlData sqlData = new SqlData("player", id).put("money", money);
             return MySQLProvider.manager.insertData(TABLE_NAME_PREFIX + currencyName, sqlData);
@@ -133,7 +133,7 @@ public class MySQLProvider implements Provider {
     @Override
     public boolean setMoney(String currencyName, String id, double amount) {
         if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return false;
-        long money = (long) amount * 100;
+        long money = (long) (amount * 100);
         return MySQLProvider.manager.setData(TABLE_NAME_PREFIX + currencyName, new SqlData("money", money), new SqlData("player", id));
     }
 
@@ -145,7 +145,7 @@ public class MySQLProvider implements Provider {
     @Override
     public boolean addMoney(String currencyName, String id, double amount) {
         if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return false;
-        long money = (long) (getMoney(currencyName, id) + amount) * 100;
+        long money = (long) ((getMoney(currencyName, id) + amount) * 100);
         return MySQLProvider.manager.setData(TABLE_NAME_PREFIX + currencyName, new SqlData("money", money), new SqlData("player", id));
     }
 
@@ -157,7 +157,7 @@ public class MySQLProvider implements Provider {
     @Override
     public boolean reduceMoney(String currencyName, String id, double amount) {
         if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return false;
-        long money = (long) (getMoney(currencyName, id) - amount) * 100;
+        long money = (long) ((getMoney(currencyName, id) - amount) * 100);
         return MySQLProvider.manager.setData(TABLE_NAME_PREFIX + currencyName, new SqlData("money", money), new SqlData("player", id));
     }
 
@@ -168,9 +168,9 @@ public class MySQLProvider implements Provider {
 
     @Override
     public double getMoney(String currencyName, String id) {
-        if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return 0;
+        if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return -1;
         SqlDataList<SqlData> sqlDataList = MySQLProvider.manager.getData(TABLE_NAME_PREFIX + currencyName, "money", new SqlData("player", id));
-        if (sqlDataList.isEmpty()) return 0;
+        if (sqlDataList.isEmpty()) return -1;
         return sqlDataList.get(0).getLong("money") / 100.0;
     }
 
@@ -186,7 +186,7 @@ public class MySQLProvider implements Provider {
         SqlData emptyData = new SqlData();
         SqlDataList<SqlData> sqlDataList = MySQLProvider.manager.getData(TABLE_NAME_PREFIX + currencyName, "*", emptyData);
         if (sqlDataList == null) {
-            return null;
+            return map;
         }
         for (SqlData sqlData : sqlDataList) {
             LinkedHashMap<String, Object> data = sqlData.getData();

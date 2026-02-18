@@ -118,7 +118,7 @@ public class PayCommand extends PluginCommand<EconomyAPI> {
 
                 sender.sendMessage(EconomyAPI.getI18n().tr(langCode, "pay-success", EconomyAPI.MONEY_FORMAT.format(amount), plugin.getMonetaryUnit(currencyName), player));
                 if (p != null) {
-                    p.sendMessage(EconomyAPI.getI18n().tr(langCode, "money-paid", sender.getName(), EconomyAPI.MONEY_FORMAT.format(amount), plugin.getMonetaryUnit(currencyName)));
+                    p.sendMessage(EconomyAPI.getI18n().tr(p.getLanguageCode(), "money-paid", sender.getName(), EconomyAPI.MONEY_FORMAT.format(amount), plugin.getMonetaryUnit(currencyName)));
                 }
                 break;
         }

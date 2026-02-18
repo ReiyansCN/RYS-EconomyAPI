@@ -125,12 +125,12 @@ public class EconomyAPI extends PluginBase implements Listener {
         CreateAccountEvent event = new CreateAccountEvent(id, defaultMoney);
         this.getServer().getPluginManager().callEvent(event);
         if (!event.isCancelled() || force) {
-            defaultMoney = event.getDefaultMoney() == -1D ? this.getDefaultMoney() : event.getDefaultMoney();
             boolean failed = false;
             for (String currencyName : MAIN_CONFIG.getCurrencyList()) {
-                failed = failed || !this.provider.createAccount(currencyName, id, defaultMoney);
+                double money = event.getDefaultMoney() == -1D ? getDefaultMoney(currencyName) : event.getDefaultMoney();
+                failed = failed || !this.provider.createAccount(currencyName, id, money);
             }
-            return !failed;// usually return true.
+            return !failed;
         }
         return false;
     }
@@ -270,6 +270,7 @@ public class EconomyAPI extends PluginBase implements Listener {
         AddMoneyEvent event = new AddMoneyEvent(id, amount);
         this.getServer().getPluginManager().callEvent(event);
         if (!event.isCancelled() || force) {
+            amount = event.getAmount();
             double money;
             if ((money = this.provider.getMoney(id)) != -1) {
                 if (money + amount > this.getMaxMoney()) {
@@ -498,6 +499,7 @@ public class EconomyAPI extends PluginBase implements Listener {
         AddMoneyEvent event = new AddMoneyEvent(id, amount, currencyName);
         this.getServer().getPluginManager().callEvent(event);
         if (!event.isCancelled() || force) {
+            amount = event.getAmount();
             double money = this.provider.getMoney(currencyName, id);
             if (money != -1) {
                 if (money + amount > getMaxMoney(currencyName)) {
@@ -665,6 +667,8 @@ public class EconomyAPI extends PluginBase implements Listener {
                 if (tryUpgradeSQLiteData()) {
                     EconomyAPI.getInstance().getLogger().info("SQLite data upgrade complete.");
                 }
+            } else {
+                return;
             }
         } else {
             EconomyAPI.getInstance().saveDefaultConfig();
@@ -687,8 +691,8 @@ public class EconomyAPI extends PluginBase implements Listener {
     @Override
     public void onDisable() {
         this.saveAll();
-        if (MAIN_CONFIG.getProvider().equals("mysql")) {
-            provider.close();
+        if (this.provider != null) {
+            this.provider.close();
         }
     }
 
@@ -764,18 +768,19 @@ public class EconomyAPI extends PluginBase implements Listener {
 
     private void checkAndConvertLegacy(UUID uuid, String name) {
         name = name.toLowerCase();
-        if (!provider.accountExists(name)) {
-            return;
+        String uuidStr = uuid.toString().toLowerCase();
+        for (String currencyName : MAIN_CONFIG.getCurrencyList()) {
+            if (!provider.accountExists(currencyName, name)) {
+                continue;
+            }
+            if (provider.accountExists(currencyName, uuidStr)) {
+                provider.removeAccount(currencyName, name);
+                continue;
+            }
+            double money = provider.getMoney(currencyName, name);
+            provider.createAccount(currencyName, uuidStr, money);
+            provider.removeAccount(currencyName, name);
         }
-
-        if (provider.accountExists(uuid.toString())) {
-            provider.removeAccount(name);
-            return;
-        }
-
-        double money = provider.getMoney(name);
-        provider.createAccount(uuid.toString(), money);
-        provider.removeAccount(name);
     }
 
     private void initServerLangCode() {
