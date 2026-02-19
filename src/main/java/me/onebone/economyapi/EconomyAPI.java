@@ -763,6 +763,12 @@ public class EconomyAPI extends PluginBase implements Listener {
 
     private Optional<UUID> checkAndConvertLegacy(String id) {
         Optional<UUID> uuid = getServer().lookupName(id);
+        if (uuid.isEmpty()) {
+            Player onlinePlayer = getServer().getPlayerExact(id);
+            if (onlinePlayer != null) {
+                uuid = Optional.of(onlinePlayer.getUniqueId());
+            }
+        }
         uuid.ifPresent(uuid1 -> checkAndConvertLegacy(uuid1, id));
         return uuid;
     }

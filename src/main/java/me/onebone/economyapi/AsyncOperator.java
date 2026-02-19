@@ -518,6 +518,12 @@ public class AsyncOperator {
 
     private Optional<UUID> checkAndConvertLegacy(String id) {
         Optional<UUID> uuid = Server.getInstance().lookupName(id);
+        if (uuid.isEmpty()) {
+            Player onlinePlayer = Server.getInstance().getPlayerExact(id);
+            if (onlinePlayer != null) {
+                uuid = Optional.of(onlinePlayer.getUniqueId());
+            }
+        }
         uuid.ifPresent(uuid1 -> checkAndConvertLegacy(uuid1, id));
         return uuid;
     }
