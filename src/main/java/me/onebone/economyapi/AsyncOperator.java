@@ -92,17 +92,10 @@ public class AsyncOperator {
             Server.getInstance().getPluginManager().callEvent(event);
 
             if (!event.isCancelled() || force) {
-                if (EconomyAPI.getInstance().provider.accountExists(currencyName, lowerId)) {
-                    double finalAmount = event.getAmount();
-                    if (finalAmount <= EconomyAPI.getInstance().getMaxMoney(currencyName)) {
-                        EconomyAPI.getInstance().provider.setMoney(currencyName, lowerId, finalAmount);
-                        this.setResult(EconomyAPI.RET_SUCCESS);
-                    } else {
-                        this.setResult(EconomyAPI.RET_INVALID);
-                    }
-                } else {
-                    this.setResult(EconomyAPI.RET_NO_ACCOUNT);
-                }
+                double finalAmount = event.getAmount();
+                int result = EconomyAPI.getInstance().provider.setMoneyChecked(
+                        currencyName, lowerId, finalAmount, EconomyAPI.getInstance().getMaxMoney(currencyName));
+                this.setResult(result);
             } else {
                 this.setResult(EconomyAPI.RET_CANCELLED);
             }
@@ -181,17 +174,10 @@ public class AsyncOperator {
             Server.getInstance().getPluginManager().callEvent(event);
 
             if (!event.isCancelled() || force) {
-                double money = EconomyAPI.getInstance().provider.getMoney(currencyName, lowerId);
-                if (money != -1) {
-                    if (money + amount > EconomyAPI.getInstance().getMaxMoney(currencyName)) {
-                        this.setResult(EconomyAPI.RET_INVALID);
-                    } else {
-                        EconomyAPI.getInstance().provider.addMoney(currencyName, lowerId, amount);
-                        this.setResult(EconomyAPI.RET_SUCCESS);
-                    }
-                } else {
-                    this.setResult(EconomyAPI.RET_NO_ACCOUNT);
-                }
+                double finalAmount = event.getAmount();
+                int result = EconomyAPI.getInstance().provider.addMoneyChecked(
+                        currencyName, lowerId, finalAmount, EconomyAPI.getInstance().getMaxMoney(currencyName));
+                this.setResult(result);
             } else {
                 this.setResult(EconomyAPI.RET_CANCELLED);
             }
@@ -275,17 +261,9 @@ public class AsyncOperator {
 
             if (!event.isCancelled() || force) {
                 double finalAmount = event.getAmount();
-                double money = EconomyAPI.getInstance().provider.getMoney(currencyName, lowerId);
-                if (money != -1) {
-                    if (money - finalAmount < 0) {
-                        this.setResult(EconomyAPI.RET_INVALID);
-                    } else {
-                        EconomyAPI.getInstance().provider.reduceMoney(currencyName, lowerId, finalAmount);
-                        this.setResult(EconomyAPI.RET_SUCCESS);
-                    }
-                } else {
-                    this.setResult(EconomyAPI.RET_NO_ACCOUNT);
-                }
+                int result = EconomyAPI.getInstance().provider.reduceMoneyChecked(
+                        currencyName, lowerId, finalAmount);
+                this.setResult(result);
             } else {
                 this.setResult(EconomyAPI.RET_CANCELLED);
             }
@@ -517,21 +495,30 @@ public class AsyncOperator {
 
     private Optional<UUID> checkAndConvertLegacy(String id) {
         Optional<UUID> uuid = Server.getInstance().lookupName(id);
+        if (uuid.isEmpty()) {
+            Player onlinePlayer = Server.getInstance().getPlayerExact(id);
+            if (onlinePlayer != null) {
+                uuid = Optional.of(onlinePlayer.getUniqueId());
+            }
+        }
         uuid.ifPresent(uuid1 -> checkAndConvertLegacy(uuid1, id));
         return uuid;
     }
 
     private void checkAndConvertLegacy(UUID uuid, String name) {
         name = name.toLowerCase();
-        if (!EconomyAPI.getInstance().provider.accountExists(name)) {
-            return;
+        String uuidStr = uuid.toString().toLowerCase();
+        for (String currencyName : EconomyAPI.MAIN_CONFIG.getCurrencyList()) {
+            if (!EconomyAPI.getInstance().provider.accountExists(currencyName, name)) {
+                continue;
+            }
+            if (EconomyAPI.getInstance().provider.accountExists(currencyName, uuidStr)) {
+                EconomyAPI.getInstance().provider.removeAccount(currencyName, name);
+                continue;
+            }
+            double money = EconomyAPI.getInstance().provider.getMoney(currencyName, name);
+            EconomyAPI.getInstance().provider.createAccount(currencyName, uuidStr, money);
+            EconomyAPI.getInstance().provider.removeAccount(currencyName, name);
         }
-        if (EconomyAPI.getInstance().provider.accountExists(uuid.toString())) {
-            EconomyAPI.getInstance().provider.removeAccount(name);
-            return;
-        }
-        double money = EconomyAPI.getInstance().provider.getMoney(name);
-        EconomyAPI.getInstance().provider.createAccount(uuid.toString(), money);
-        EconomyAPI.getInstance().provider.removeAccount(name);
     }
 }

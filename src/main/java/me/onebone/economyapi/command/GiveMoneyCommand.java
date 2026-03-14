@@ -56,7 +56,7 @@ public class GiveMoneyCommand extends PluginCommand<EconomyAPI> {
         if (!this.plugin.isEnabled()) return false;
         LangCode langCode = sender instanceof Player ? ((Player) sender).getLanguageCode() : serverLangCode;
         if (!sender.hasPermission("economyapi.command.givemoney")) {
-            sender.sendMessage(new TranslationContainer(TextFormat.RED + "%cofalsemmands.generic.permission"));
+            sender.sendMessage(new TranslationContainer(TextFormat.RED + "%commands.generic.permission"));
             return false;
         }
 

@@ -26,3 +26,5 @@ permissions:
             default: true
           economyapi.command.setmoney:
             default: op
+          economyapi.command.migratedata:
+            default: op

@@ -79,7 +79,17 @@ public class TopMoneyCommand extends PluginCommand<EconomyAPI> {
             return false;
         }
 
-        int arg = args.length > 0 ? Integer.parseInt(args[0]) : 1;
+        int arg;
+        if (args.length > 0) {
+            try {
+                arg = Integer.parseInt(args[0]);
+            } catch (NumberFormatException e) {
+                sender.sendMessage(new TranslationContainer("commands.generic.usage", this.getUsage()));
+                return false;
+            }
+        } else {
+            arg = 1;
+        }
         final String currencyName = args.length >= 2 ? args[1] : MAIN_CONFIG.getDefaultCurrency().getName();
 
         sender.getServer().getScheduler().scheduleTask(EconomyAPI.getInstance(), () -> {

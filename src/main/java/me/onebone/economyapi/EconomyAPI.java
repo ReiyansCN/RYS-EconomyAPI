@@ -22,6 +22,7 @@ import cn.nukkit.IPlayer;
 import cn.nukkit.Player;
 import cn.nukkit.Server;
 import cn.nukkit.event.EventHandler;
+import cn.nukkit.event.EventPriority;
 import cn.nukkit.event.Listener;
 import cn.nukkit.event.player.PlayerJoinEvent;
 import cn.nukkit.lang.LangCode;
@@ -121,15 +122,16 @@ public class EconomyAPI extends PluginBase implements Listener {
     }
 
     private boolean createAccountInternal(String id, double defaultMoney, boolean force) {
+        id = id.toLowerCase();
         CreateAccountEvent event = new CreateAccountEvent(id, defaultMoney);
         this.getServer().getPluginManager().callEvent(event);
         if (!event.isCancelled() || force) {
-            defaultMoney = event.getDefaultMoney() == -1D ? this.getDefaultMoney() : event.getDefaultMoney();
             boolean failed = false;
             for (String currencyName : MAIN_CONFIG.getCurrencyList()) {
-                failed = failed || !this.provider.createAccount(currencyName, id, defaultMoney);
+                double money = event.getDefaultMoney() == -1D ? getDefaultMoney(currencyName) : event.getDefaultMoney();
+                failed = failed || !this.provider.createAccount(currencyName, id, money);
             }
-            return !failed;// usually return true.
+            return !failed;
         }
         return false;
     }
@@ -210,18 +212,8 @@ public class EconomyAPI extends PluginBase implements Listener {
         SetMoneyEvent event = new SetMoneyEvent(id, amount);
         this.getServer().getPluginManager().callEvent(event);
         if (!event.isCancelled() || force) {
-            if (this.provider.accountExists(id)) {
-                amount = event.getAmount();
-
-                if (amount <= this.getMaxMoney()) {
-                    this.provider.setMoney(id, amount);
-                    return RET_SUCCESS;
-                } else {
-                    return RET_INVALID;
-                }
-            } else {
-                return RET_NO_ACCOUNT;
-            }
+            return this.provider.setMoneyChecked(
+                    MAIN_CONFIG.getDefaultCurrency().getName(), id, event.getAmount(), this.getMaxMoney());
         }
         return RET_CANCELLED;
     }
@@ -269,17 +261,8 @@ public class EconomyAPI extends PluginBase implements Listener {
         AddMoneyEvent event = new AddMoneyEvent(id, amount);
         this.getServer().getPluginManager().callEvent(event);
         if (!event.isCancelled() || force) {
-            double money;
-            if ((money = this.provider.getMoney(id)) != -1) {
-                if (money + amount > this.getMaxMoney()) {
-                    return RET_INVALID;
-                } else {
-                    this.provider.addMoney(id, amount);
-                    return RET_SUCCESS;
-                }
-            } else {
-                return RET_NO_ACCOUNT;
-            }
+            return this.provider.addMoneyChecked(
+                    MAIN_CONFIG.getDefaultCurrency().getName(), id, event.getAmount(), this.getMaxMoney());
         }
         return RET_CANCELLED;
     }
@@ -328,19 +311,8 @@ public class EconomyAPI extends PluginBase implements Listener {
         ReduceMoneyEvent event = new ReduceMoneyEvent(id, amount);
         this.getServer().getPluginManager().callEvent(event);
         if (!event.isCancelled() || force) {
-            amount = event.getAmount();
-
-            double money;
-            if ((money = this.provider.getMoney(id)) != -1) {
-                if (money - amount < 0) {
-                    return RET_INVALID;
-                } else {
-                    this.provider.reduceMoney(id, amount);
-                    return RET_SUCCESS;
-                }
-            } else {
-                return RET_NO_ACCOUNT;
-            }
+            return this.provider.reduceMoneyChecked(
+                    MAIN_CONFIG.getDefaultCurrency().getName(), id, event.getAmount());
         }
         return RET_CANCELLED;
     }
@@ -354,7 +326,7 @@ public class EconomyAPI extends PluginBase implements Listener {
     }
 
     public boolean hasAccount(String id) {
-        return provider.accountExists(checkAndConvertLegacy(id).map(UUID::toString).map(String::toLowerCase).orElse(id));
+        return provider.accountExists(checkAndConvertLegacy(id).map(UUID::toString).map(String::toLowerCase).orElse(id.toLowerCase()));
     }
 
     public String getMonetaryUnit() {
@@ -439,17 +411,7 @@ public class EconomyAPI extends PluginBase implements Listener {
         SetMoneyEvent event = new SetMoneyEvent(id, amount, currencyName);
         this.getServer().getPluginManager().callEvent(event);
         if (!event.isCancelled() || force) {
-            if (this.provider.accountExists(currencyName, id)) {
-                amount = event.getAmount();
-                if (amount <= getMaxMoney(currencyName)) {
-                    this.provider.setMoney(currencyName, id, amount);
-                    return RET_SUCCESS;
-                } else {
-                    return RET_INVALID;
-                }
-            } else {
-                return RET_NO_ACCOUNT;
-            }
+            return this.provider.setMoneyChecked(currencyName, id, event.getAmount(), getMaxMoney(currencyName));
         }
         return RET_CANCELLED;
     }
@@ -497,17 +459,7 @@ public class EconomyAPI extends PluginBase implements Listener {
         AddMoneyEvent event = new AddMoneyEvent(id, amount, currencyName);
         this.getServer().getPluginManager().callEvent(event);
         if (!event.isCancelled() || force) {
-            double money = this.provider.getMoney(currencyName, id);
-            if (money != -1) {
-                if (money + amount > getMaxMoney(currencyName)) {
-                    return RET_INVALID;
-                } else {
-                    this.provider.addMoney(currencyName, id, amount);
-                    return RET_SUCCESS;
-                }
-            } else {
-                return RET_NO_ACCOUNT;
-            }
+            return this.provider.addMoneyChecked(currencyName, id, event.getAmount(), getMaxMoney(currencyName));
         }
         return RET_CANCELLED;
     }
@@ -555,18 +507,7 @@ public class EconomyAPI extends PluginBase implements Listener {
         ReduceMoneyEvent event = new ReduceMoneyEvent(id, amount, currencyName);
         this.getServer().getPluginManager().callEvent(event);
         if (!event.isCancelled() || force) {
-            amount = event.getAmount();
-            double money = this.provider.getMoney(currencyName, id);
-            if (money != -1) {
-                if (money - amount < 0) {
-                    return RET_INVALID;
-                } else {
-                    this.provider.reduceMoney(currencyName, id, amount);
-                    return RET_SUCCESS;
-                }
-            } else {
-                return RET_NO_ACCOUNT;
-            }
+            return this.provider.reduceMoneyChecked(currencyName, id, event.getAmount());
         }
         return RET_CANCELLED;
     }
@@ -607,6 +548,7 @@ public class EconomyAPI extends PluginBase implements Listener {
     }
 
     private boolean createAccountInternal(String id, double defaultMoney, String currencyName, boolean force) {
+        id = id.toLowerCase();
         CreateAccountEvent event = new CreateAccountEvent(id, defaultMoney, currencyName);
         this.getServer().getPluginManager().callEvent(event);
         if (!event.isCancelled() || force) {
@@ -663,6 +605,8 @@ public class EconomyAPI extends PluginBase implements Listener {
                 if (tryUpgradeSQLiteData()) {
                     EconomyAPI.getInstance().getLogger().info("SQLite data upgrade complete.");
                 }
+            } else {
+                return;
             }
         } else {
             EconomyAPI.getInstance().saveDefaultConfig();
@@ -677,7 +621,7 @@ public class EconomyAPI extends PluginBase implements Listener {
         }
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.LOWEST)
     public void onJoin(PlayerJoinEvent event) {
         this.createAccount(event.getPlayer());
     }
@@ -685,8 +629,8 @@ public class EconomyAPI extends PluginBase implements Listener {
     @Override
     public void onDisable() {
         this.saveAll();
-        if (MAIN_CONFIG.getProvider().equals("mysql")) {
-            provider.close();
+        if (this.provider != null) {
+            this.provider.close();
         }
     }
 
@@ -702,6 +646,7 @@ public class EconomyAPI extends PluginBase implements Listener {
         this.getServer().getCommandMap().register("economy", new TakeMoneyCommand(this));
         this.getServer().getCommandMap().register("economy", new PayCommand(this));
         this.getServer().getCommandMap().register("economy", new SetMoneyCommand(this));
+        this.getServer().getCommandMap().register("economy", new MigrateDataCommand(this));
     }
 
     private boolean selectProvider() {
@@ -726,6 +671,10 @@ public class EconomyAPI extends PluginBase implements Listener {
 
         this.getLogger().info("Data provider was set to: " + provider.getName());
         return true;
+    }
+
+    public Provider getProvider() {
+        return this.provider;
     }
 
     public boolean addProvider(String name, Class<? extends Provider> providerClass) {
@@ -756,24 +705,31 @@ public class EconomyAPI extends PluginBase implements Listener {
 
     private Optional<UUID> checkAndConvertLegacy(String id) {
         Optional<UUID> uuid = getServer().lookupName(id);
+        if (uuid.isEmpty()) {
+            Player onlinePlayer = getServer().getPlayerExact(id);
+            if (onlinePlayer != null) {
+                uuid = Optional.of(onlinePlayer.getUniqueId());
+            }
+        }
         uuid.ifPresent(uuid1 -> checkAndConvertLegacy(uuid1, id));
         return uuid;
     }
 
     private void checkAndConvertLegacy(UUID uuid, String name) {
         name = name.toLowerCase();
-        if (!provider.accountExists(name)) {
-            return;
+        String uuidStr = uuid.toString().toLowerCase();
+        for (String currencyName : MAIN_CONFIG.getCurrencyList()) {
+            if (!provider.accountExists(currencyName, name)) {
+                continue;
+            }
+            if (provider.accountExists(currencyName, uuidStr)) {
+                provider.removeAccount(currencyName, name);
+                continue;
+            }
+            double money = provider.getMoney(currencyName, name);
+            provider.createAccount(currencyName, uuidStr, money);
+            provider.removeAccount(currencyName, name);
         }
-
-        if (provider.accountExists(uuid.toString())) {
-            provider.removeAccount(name);
-            return;
-        }
-
-        double money = provider.getMoney(name);
-        provider.createAccount(uuid.toString(), money);
-        provider.removeAccount(name);
     }
 
     private void initServerLangCode() {

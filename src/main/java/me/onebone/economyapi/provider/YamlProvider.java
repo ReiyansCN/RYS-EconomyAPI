@@ -4,6 +4,8 @@ import cn.nukkit.utils.Config;
 
 import java.io.File;
 import java.util.LinkedHashMap;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import static me.onebone.economyapi.EconomyAPI.MAIN_CONFIG;
 
@@ -12,26 +14,32 @@ import static me.onebone.economyapi.EconomyAPI.MAIN_CONFIG;
  */
 public class YamlProvider implements Provider {
     private final LinkedHashMap<String, Config> currenciesData = new LinkedHashMap<>();
+    private final ReadWriteLock lock = new ReentrantReadWriteLock();
 
     @Override
     public void init(File path) {
-        MAIN_CONFIG.getCurrencyList().forEach(currencyName -> {
-            Config file = new Config(new File(path, "money" + File.separator + currencyName + ".yml"), Config.YAML);
-            file.set("version", 3);
-            LinkedHashMap<String, Object> temp = (LinkedHashMap) file.getRootSection()
-                    .computeIfAbsent("money", s -> new LinkedHashMap<>());
-            temp.forEach((username, money) -> {
-                if (money instanceof Integer) {
-                    file.set(username, ((Integer) money).doubleValue());
-                } else if (money instanceof Double) {
-                    file.set(username, money);
-                } else if (money instanceof String) {
-                    file.set(username, Double.parseDouble(money.toString()));
-                }
+        lock.writeLock().lock();
+        try {
+            MAIN_CONFIG.getCurrencyList().forEach(currencyName -> {
+                Config file = new Config(new File(path, "money" + File.separator + currencyName + ".yml"), Config.YAML);
+                file.set("version", 3);
+                LinkedHashMap<String, Object> temp = (LinkedHashMap) file.getRootSection()
+                        .computeIfAbsent("money", s -> new LinkedHashMap<>());
+                temp.forEach((username, money) -> {
+                    if (money instanceof Integer) {
+                        file.set("money." + username, ((Integer) money).doubleValue());
+                    } else if (money instanceof Double) {
+                        file.set("money." + username, money);
+                    } else if (money instanceof String) {
+                        file.set("money." + username, Double.parseDouble(money.toString()));
+                    }
+                });
+                file.save();
+                currenciesData.put(currencyName, file);
             });
-            file.save();
-            currenciesData.put(currencyName, file);
-        });
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
     @Override
@@ -41,19 +49,34 @@ public class YamlProvider implements Provider {
 
     @Override
     public void save() {
-        currenciesData.values().forEach(cfg -> cfg.save());
+        lock.readLock().lock();
+        try {
+            currenciesData.values().forEach(Config::save);
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
     @Override
     public void close() {
-        this.save();
-        currenciesData.clear();
+        lock.writeLock().lock();
+        try {
+            currenciesData.values().forEach(Config::save);
+            currenciesData.clear();
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
     @Override
     public boolean accountExists(String currencyName, String id) {
-        if (!currenciesData.containsKey(currencyName)) return false;
-        return currenciesData.get(currencyName).exists("money." + id);
+        lock.readLock().lock();
+        try {
+            if (!currenciesData.containsKey(currencyName)) return false;
+            return currenciesData.get(currencyName).exists("money." + id);
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
     @Override
@@ -63,12 +86,18 @@ public class YamlProvider implements Provider {
 
     @Override
     public boolean removeAccount(String currencyName, String id) {
-        if (!currenciesData.containsKey(currencyName)) return false;
-        if (accountExists(currencyName, id)) {
-            currenciesData.get(currencyName).remove("money." + id);
-            return true;
+        lock.writeLock().lock();
+        try {
+            if (!currenciesData.containsKey(currencyName)) return false;
+            Config data = currenciesData.get(currencyName);
+            if (data.exists("money." + id)) {
+                data.remove("money." + id);
+                return true;
+            }
+            return false;
+        } finally {
+            lock.writeLock().unlock();
         }
-        return false;
     }
 
     @Override
@@ -78,12 +107,16 @@ public class YamlProvider implements Provider {
 
     @Override
     public boolean createAccount(String currencyName, String id, double defaultMoney) {
-        if (!accountExists(currencyName, id)) {
+        lock.writeLock().lock();
+        try {
             if (!currenciesData.containsKey(currencyName)) return false;
-            currenciesData.get(currencyName).set("money." + id, defaultMoney);
+            Config data = currenciesData.get(currencyName);
+            if (data.exists("money." + id)) return false;
+            data.set("money." + id, defaultMoney);
             return true;
+        } finally {
+            lock.writeLock().unlock();
         }
-        return false;
     }
 
     @Override
@@ -93,11 +126,16 @@ public class YamlProvider implements Provider {
 
     @Override
     public boolean setMoney(String currencyName, String id, double amount) {
-        if (!accountExists(currencyName, id)) {
-            return false;
+        lock.writeLock().lock();
+        try {
+            if (!currenciesData.containsKey(currencyName)) return false;
+            Config data = currenciesData.get(currencyName);
+            if (!data.exists("money." + id)) return false;
+            data.set("money." + id, amount);
+            return true;
+        } finally {
+            lock.writeLock().unlock();
         }
-        currenciesData.get(currencyName).set("money." + id, amount);
-        return false;
     }
 
     @Override
@@ -107,14 +145,17 @@ public class YamlProvider implements Provider {
 
     @Override
     public boolean addMoney(String currencyName, String id, double amount) {
-        if (!accountExists(currencyName, id)) {
-            return false;
+        lock.writeLock().lock();
+        try {
+            if (!currenciesData.containsKey(currencyName)) return false;
+            Config data = currenciesData.get(currencyName);
+            if (!data.exists("money." + id)) return false;
+            data.set("money." + id, data.getDouble("money." + id) + amount);
+            return true;
+        } finally {
+            lock.writeLock().unlock();
         }
-        Config data = currenciesData.get(currencyName);
-        data.set("money." + id, data.getDouble("money." + id) + amount);
-        return true;
     }
-
 
     @Override
     public boolean addMoney(String id, double amount) {
@@ -123,12 +164,16 @@ public class YamlProvider implements Provider {
 
     @Override
     public boolean reduceMoney(String currencyName, String id, double amount) {
-        if (!accountExists(currencyName, id)) {
-            return false;
+        lock.writeLock().lock();
+        try {
+            if (!currenciesData.containsKey(currencyName)) return false;
+            Config data = currenciesData.get(currencyName);
+            if (!data.exists("money." + id)) return false;
+            data.set("money." + id, data.getDouble("money." + id) - amount);
+            return true;
+        } finally {
+            lock.writeLock().unlock();
         }
-        Config data = currenciesData.get(currencyName);
-        data.set("money." + id, data.getDouble("money." + id) - amount);
-        return true;
     }
 
     @Override
@@ -138,10 +183,15 @@ public class YamlProvider implements Provider {
 
     @Override
     public double getMoney(String currencyName, String id) {
-        if (!accountExists(currencyName, id)) {
-            return -1;
+        lock.readLock().lock();
+        try {
+            if (!currenciesData.containsKey(currencyName)) return -1;
+            Config data = currenciesData.get(currencyName);
+            if (!data.exists("money." + id)) return -1;
+            return data.getDouble("money." + id);
+        } finally {
+            lock.readLock().unlock();
         }
-        return currenciesData.get(currencyName).getDouble("money." + id);
     }
 
     @Override
@@ -150,20 +200,26 @@ public class YamlProvider implements Provider {
     }
 
     public LinkedHashMap<String, Double> getAll(String currencyName) {
-        LinkedHashMap<String, Double> result = new LinkedHashMap<>();
-        if (!currenciesData.containsKey(currencyName)) return result;
-        LinkedHashMap<String, Object> temp = (LinkedHashMap) currenciesData.get(currencyName).getRootSection()
-                .computeIfAbsent("money", s -> new LinkedHashMap<>());
-        temp.forEach((username, money) -> {
-            if (money instanceof Integer) {
-                result.put(username, ((Integer) money).doubleValue());
-            } else if (money instanceof Double) {
-                result.put(username, (Double) money);
-            } else if (money instanceof String) {
-                result.put(username, Double.parseDouble(money.toString()));
-            }
-        });
-        return result;
+        lock.readLock().lock();
+        try {
+            LinkedHashMap<String, Double> result = new LinkedHashMap<>();
+            if (!currenciesData.containsKey(currencyName)) return result;
+            Object moneySection = currenciesData.get(currencyName).getRootSection().get("money");
+            if (!(moneySection instanceof LinkedHashMap)) return result;
+            LinkedHashMap<String, Object> temp = (LinkedHashMap) moneySection;
+            temp.forEach((username, money) -> {
+                if (money instanceof Integer) {
+                    result.put(username, ((Integer) money).doubleValue());
+                } else if (money instanceof Double) {
+                    result.put(username, (Double) money);
+                } else if (money instanceof String) {
+                    result.put(username, Double.parseDouble(money.toString()));
+                }
+            });
+            return result;
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
     public LinkedHashMap<String, Double> getAll() {
@@ -172,5 +228,52 @@ public class YamlProvider implements Provider {
 
     public String getName() {
         return "Yaml";
+    }
+
+    @Override
+    public int setMoneyChecked(String currencyName, String id, double amount, double maxMoney) {
+        lock.writeLock().lock();
+        try {
+            if (!currenciesData.containsKey(currencyName)) return RET_NO_ACCOUNT;
+            Config data = currenciesData.get(currencyName);
+            if (!data.exists("money." + id)) return RET_NO_ACCOUNT;
+            if (amount > maxMoney) return RET_INVALID;
+            data.set("money." + id, amount);
+            return RET_SUCCESS;
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    @Override
+    public int addMoneyChecked(String currencyName, String id, double amount, double maxMoney) {
+        lock.writeLock().lock();
+        try {
+            if (!currenciesData.containsKey(currencyName)) return RET_NO_ACCOUNT;
+            Config data = currenciesData.get(currencyName);
+            if (!data.exists("money." + id)) return RET_NO_ACCOUNT;
+            double money = data.getDouble("money." + id);
+            if (money + amount > maxMoney) return RET_INVALID;
+            data.set("money." + id, money + amount);
+            return RET_SUCCESS;
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    @Override
+    public int reduceMoneyChecked(String currencyName, String id, double amount) {
+        lock.writeLock().lock();
+        try {
+            if (!currenciesData.containsKey(currencyName)) return RET_NO_ACCOUNT;
+            Config data = currenciesData.get(currencyName);
+            if (!data.exists("money." + id)) return RET_NO_ACCOUNT;
+            double money = data.getDouble("money." + id);
+            if (money - amount < 0) return RET_INVALID;
+            data.set("money." + id, money - amount);
+            return RET_SUCCESS;
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 }
