@@ -19,12 +19,16 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import static me.onebone.economyapi.EconomyAPI.MAIN_CONFIG;
 
 public class MySQLProvider implements Provider {
-    private static SqlManager manager;
+    private static volatile SqlManager manager;
     private static String TABLE_NAME_PREFIX = "";
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
 
     public static void initTablePrefix(String prefix) {
         MySQLProvider.TABLE_NAME_PREFIX = prefix;
+    }
+
+    private static boolean isReady() {
+        return MySQLProvider.manager != null;
     }
 
     @Override
@@ -35,8 +39,7 @@ public class MySQLProvider implements Provider {
         }
 
         if (!MAIN_CONFIG.getConfig().exists("sql.mysql")) {
-            EconomyAPI.getInstance().getLogger().error("MySQL is not configured.");
-            return;
+            throw new RuntimeException("MySQL is not configured.");
         }
         ConfigSection mysqlSection = MAIN_CONFIG.getConfig().getSection("sql.mysql");
         String host = mysqlSection.getString("host", "localhost");
@@ -47,26 +50,24 @@ public class MySQLProvider implements Provider {
         String tablePrefix = mysqlSection.getString("table-prefix", "v1_");
         MySQLProvider.initTablePrefix(tablePrefix);
 
-        Server.getInstance().getScheduler().scheduleTask(EconomyAPI.getInstance(), () -> {
-            try {
-                SqlManager manager = new SqlManager(EconomyAPI.getInstance(), new UserData(
-                        username, password, host, port, database
-                ));
-                MySQLProvider.manager = manager;
+        try {
+            SqlManager manager = new SqlManager(EconomyAPI.getInstance(), new UserData(
+                    username, password, host, port, database
+            ));
+            MySQLProvider.manager = manager;
 
-                MAIN_CONFIG.getCurrencyList().forEach(currencyName -> {
-                    manager.createTable(
-                            TABLE_NAME_PREFIX + currencyName,
-                            new TableType("player", DataType.getUUID(), true),
-                            new TableType("money", DataType.getBIGINT(), false)
-                    );
-                });
-                EconomyAPI.getInstance().getLogger().info("MySQL initialized!");
-            } catch (MySqlLoginException e) {
-                EconomyAPI.getInstance().getLogger().error("MySQL connection failed.", e);
-                Server.getInstance().getPluginManager().disablePlugin(EconomyAPI.getInstance());
-            }
-        }, true);
+            MAIN_CONFIG.getCurrencyList().forEach(currencyName -> {
+                manager.createTable(
+                        TABLE_NAME_PREFIX + currencyName,
+                        new TableType("player", DataType.getUUID(), true),
+                        new TableType("money", DataType.getBIGINT(), false)
+                );
+            });
+            EconomyAPI.getInstance().getLogger().info("MySQL initialized!");
+        } catch (MySqlLoginException e) {
+            EconomyAPI.getInstance().getLogger().error("MySQL connection failed.", e);
+            Server.getInstance().getPluginManager().disablePlugin(EconomyAPI.getInstance());
+        }
     }
 
     @Override
@@ -97,6 +98,7 @@ public class MySQLProvider implements Provider {
     public boolean accountExists(String currencyName, String id) {
         lock.readLock().lock();
         try {
+            if (!isReady()) return false;
             if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return false;
             if (MySQLProvider.manager.isExistTable(TABLE_NAME_PREFIX + currencyName)) {
                 return MySQLProvider.manager.isExistsData(TABLE_NAME_PREFIX + currencyName, "player", id);
@@ -116,6 +118,7 @@ public class MySQLProvider implements Provider {
     public boolean removeAccount(String currencyName, String id) {
         lock.writeLock().lock();
         try {
+            if (!isReady()) return false;
             if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return false;
             if (MySQLProvider.manager.isExistTable(TABLE_NAME_PREFIX + currencyName)) {
                 return MySQLProvider.manager.deleteData(TABLE_NAME_PREFIX + currencyName, new SqlData("player", id));
@@ -135,6 +138,7 @@ public class MySQLProvider implements Provider {
     public boolean createAccount(String currencyName, String id, double defaultMoney) {
         lock.writeLock().lock();
         try {
+            if (!isReady()) return false;
             if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return false;
             long money = (long) (defaultMoney * 100);
             if (!accountExists(currencyName, id)) {
@@ -156,6 +160,7 @@ public class MySQLProvider implements Provider {
     public boolean setMoney(String currencyName, String id, double amount) {
         lock.writeLock().lock();
         try {
+            if (!isReady()) return false;
             if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return false;
             long money = (long) (amount * 100);
             return MySQLProvider.manager.setData(TABLE_NAME_PREFIX + currencyName, new SqlData("money", money), new SqlData("player", id));
@@ -173,6 +178,7 @@ public class MySQLProvider implements Provider {
     public boolean addMoney(String currencyName, String id, double amount) {
         lock.writeLock().lock();
         try {
+            if (!isReady()) return false;
             if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return false;
             double current = getMoney(currencyName, id);
             if (current == -1) return false;
@@ -192,6 +198,7 @@ public class MySQLProvider implements Provider {
     public boolean reduceMoney(String currencyName, String id, double amount) {
         lock.writeLock().lock();
         try {
+            if (!isReady()) return false;
             if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return false;
             double current = getMoney(currencyName, id);
             if (current == -1) return false;
@@ -211,6 +218,7 @@ public class MySQLProvider implements Provider {
     public double getMoney(String currencyName, String id) {
         lock.readLock().lock();
         try {
+            if (!isReady()) return -1;
             if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return -1;
             SqlDataList<SqlData> sqlDataList = MySQLProvider.manager.getData(TABLE_NAME_PREFIX + currencyName, "money", new SqlData("player", id));
             if (sqlDataList.isEmpty()) return -1;
@@ -230,6 +238,7 @@ public class MySQLProvider implements Provider {
         lock.readLock().lock();
         try {
             LinkedHashMap<String, Double> map = new LinkedHashMap<>();
+            if (!isReady()) return map;
             if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return map;
             SqlData emptyData = new SqlData();
             SqlDataList<SqlData> sqlDataList = MySQLProvider.manager.getData(TABLE_NAME_PREFIX + currencyName, "*", emptyData);
@@ -266,6 +275,7 @@ public class MySQLProvider implements Provider {
     public int setMoneyChecked(String currencyName, String id, double amount, double maxMoney) {
         lock.writeLock().lock();
         try {
+            if (!isReady()) return RET_NO_ACCOUNT;
             if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return RET_NO_ACCOUNT;
             if (!accountExists(currencyName, id)) return RET_NO_ACCOUNT;
             if (amount > maxMoney) return RET_INVALID;
@@ -281,6 +291,7 @@ public class MySQLProvider implements Provider {
     public int addMoneyChecked(String currencyName, String id, double amount, double maxMoney) {
         lock.writeLock().lock();
         try {
+            if (!isReady()) return RET_NO_ACCOUNT;
             if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return RET_NO_ACCOUNT;
             double current = getMoney(currencyName, id);
             if (current == -1) return RET_NO_ACCOUNT;
@@ -297,6 +308,7 @@ public class MySQLProvider implements Provider {
     public int reduceMoneyChecked(String currencyName, String id, double amount) {
         lock.writeLock().lock();
         try {
+            if (!isReady()) return RET_NO_ACCOUNT;
             if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return RET_NO_ACCOUNT;
             double current = getMoney(currencyName, id);
             if (current == -1) return RET_NO_ACCOUNT;
