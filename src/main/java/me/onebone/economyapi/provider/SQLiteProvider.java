@@ -4,9 +4,11 @@ import com.smallaswater.easysqlx.sqlite.SQLiteHelper;
 import com.smallaswater.easysqlx.sqlite.SQLiteHelper.DBTable;
 
 import java.io.File;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import static me.onebone.economyapi.EconomyAPI.MAIN_CONFIG;
 
@@ -20,10 +22,12 @@ public class SQLiteProvider implements Provider {
     private static final String COLUMN_MONEY = "money";
     private static final String COLUMN_CURRENCY = "currency"; // 新增 currency 列
     private SQLiteHelper sqLiteHelper;
-    private final HashMap<String, MoneyData> cache = new HashMap<>(); // Key 修改为 currencyName:playerName
+    private final ConcurrentHashMap<String, MoneyData> cache = new ConcurrentHashMap<>(); // Key 修改为 currencyName:playerName
+    private final ReadWriteLock lock = new ReentrantReadWriteLock();
 
     @Override
     public void init(File path) {
+        lock.writeLock().lock();
         try {
             this.sqLiteHelper = new SQLiteHelper(path.getAbsolutePath() + File.separator + "MoneyV3.db");
             if (!this.sqLiteHelper.exists(TABLE_NAME)) {
@@ -35,6 +39,8 @@ public class SQLiteProvider implements Provider {
             });
         } catch (Exception e) {
             throw new RuntimeException(e);
+        } finally {
+            lock.writeLock().unlock();
         }
     }
 
@@ -49,8 +55,13 @@ public class SQLiteProvider implements Provider {
 
     @Override
     public void close() {
-        if (this.sqLiteHelper != null) {
-            this.sqLiteHelper.close();
+        lock.writeLock().lock();
+        try {
+            if (this.sqLiteHelper != null) {
+                this.sqLiteHelper.close();
+            }
+        } finally {
+            lock.writeLock().unlock();
         }
     }
 
@@ -60,8 +71,13 @@ public class SQLiteProvider implements Provider {
 
     @Override
     public boolean accountExists(String currencyName, String id) {
-        LinkedList<MoneyData> dataList = this.sqLiteHelper.getDataByString(TABLE_NAME, COLUMN_PLAYER + " = ? AND " + COLUMN_CURRENCY + " = ?", new String[]{id, currencyName}, MoneyData.class);
-        return !dataList.isEmpty();
+        lock.readLock().lock();
+        try {
+            LinkedList<MoneyData> dataList = this.sqLiteHelper.getDataByString(TABLE_NAME, COLUMN_PLAYER + " = ? AND " + COLUMN_CURRENCY + " = ?", new String[]{id, currencyName}, MoneyData.class);
+            return !dataList.isEmpty();
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
     @Override
@@ -71,15 +87,20 @@ public class SQLiteProvider implements Provider {
 
     @Override
     public boolean removeAccount(String currencyName, String id) {
-        if (!accountExists(currencyName, id)) {
-            return false;
+        lock.writeLock().lock();
+        try {
+            if (!accountExists(currencyName, id)) {
+                return false;
+            }
+            MoneyData moneyData = this.getMoneyData(currencyName, id);
+            if (moneyData != null) {
+                this.sqLiteHelper.remove(TABLE_NAME, (int) moneyData.getId());
+            }
+            this.cache.remove(getCacheKey(currencyName, id));
+            return true;
+        } finally {
+            lock.writeLock().unlock();
         }
-        MoneyData moneyData = this.getMoneyData(currencyName, id);
-        if (moneyData != null) {
-            this.sqLiteHelper.remove(TABLE_NAME, (int) moneyData.getId());
-        }
-        this.cache.remove(getCacheKey(currencyName, id));
-        return true;
     }
 
     @Override
@@ -89,14 +110,19 @@ public class SQLiteProvider implements Provider {
 
     @Override
     public boolean createAccount(String currencyName, String id, double defaultMoney) {
-        if (accountExists(currencyName, id)) {
-            return false;
+        lock.writeLock().lock();
+        try {
+            if (accountExists(currencyName, id)) {
+                return false;
+            }
+            MoneyData values = new MoneyData(id, defaultMoney);
+            values.setCurrency(currencyName); // 设置 currencyName
+            this.sqLiteHelper.add(TABLE_NAME, values);
+            this.cache.put(getCacheKey(currencyName, id), values); // 添加到缓存
+            return true;
+        } finally {
+            lock.writeLock().unlock();
         }
-        MoneyData values = new MoneyData(id, defaultMoney);
-        values.setCurrency(currencyName); // 设置 currencyName
-        this.sqLiteHelper.add(TABLE_NAME, values);
-        this.cache.put(getCacheKey(currencyName, id), values); // 添加到缓存
-        return true;
     }
 
     @Override
@@ -106,14 +132,17 @@ public class SQLiteProvider implements Provider {
 
     @Override
     public boolean setMoney(String currencyName, String id, double amount) {
-        if (!accountExists(currencyName, id)) {
-            return false;
+        lock.writeLock().lock();
+        try {
+            MoneyData moneyData = this.getMoneyData(currencyName, id);
+            if (moneyData == null) return false;
+            moneyData.setMoney(amount);
+            this.sqLiteHelper.set(TABLE_NAME, COLUMN_ID, String.valueOf(moneyData.getId()), moneyData);
+            this.cache.put(getCacheKey(currencyName, id), moneyData);
+            return true;
+        } finally {
+            lock.writeLock().unlock();
         }
-        MoneyData moneyData = this.getMoneyData(currencyName, id);
-        moneyData.setMoney(amount);
-        this.sqLiteHelper.set(TABLE_NAME, COLUMN_ID, String.valueOf(moneyData.getId()), moneyData);
-        this.cache.put(getCacheKey(currencyName, id), moneyData);
-        return true;
     }
 
     @Override
@@ -123,11 +152,17 @@ public class SQLiteProvider implements Provider {
 
     @Override
     public boolean addMoney(String currencyName, String id, double amount) {
-        if (!accountExists(currencyName, id)) {
-            return false;
+        lock.writeLock().lock();
+        try {
+            MoneyData moneyData = this.getMoneyData(currencyName, id);
+            if (moneyData == null) return false;
+            moneyData.setMoney(moneyData.getMoney() + amount);
+            this.sqLiteHelper.set(TABLE_NAME, COLUMN_ID, String.valueOf(moneyData.getId()), moneyData);
+            this.cache.put(getCacheKey(currencyName, id), moneyData);
+            return true;
+        } finally {
+            lock.writeLock().unlock();
         }
-        this.setMoney(currencyName, id, this.getMoney(currencyName, id) + amount);
-        return true;
     }
 
     @Override
@@ -137,11 +172,17 @@ public class SQLiteProvider implements Provider {
 
     @Override
     public boolean reduceMoney(String currencyName, String id, double amount) {
-        if (!accountExists(currencyName, id)) {
-            return false;
+        lock.writeLock().lock();
+        try {
+            MoneyData moneyData = this.getMoneyData(currencyName, id);
+            if (moneyData == null) return false;
+            moneyData.setMoney(moneyData.getMoney() - amount);
+            this.sqLiteHelper.set(TABLE_NAME, COLUMN_ID, String.valueOf(moneyData.getId()), moneyData);
+            this.cache.put(getCacheKey(currencyName, id), moneyData);
+            return true;
+        } finally {
+            lock.writeLock().unlock();
         }
-        this.setMoney(currencyName, id, this.getMoney(currencyName, id) - amount);
-        return true;
     }
 
     @Override
@@ -151,11 +192,16 @@ public class SQLiteProvider implements Provider {
 
     @Override
     public double getMoney(String currencyName, String id) {
-        MoneyData data = this.getMoneyData(currencyName, id);
-        if (data != null) {
-            return data.getMoney();
+        lock.readLock().lock();
+        try {
+            MoneyData data = this.getMoneyData(currencyName, id);
+            if (data != null) {
+                return data.getMoney();
+            }
+            return -1;
+        } finally {
+            lock.readLock().unlock();
         }
-        return -1;
     }
 
     @Override
@@ -165,14 +211,19 @@ public class SQLiteProvider implements Provider {
 
     @Override
     public LinkedHashMap<String, Double> getAll(String currencyName) {
-        LinkedHashMap<String, Double> map = new LinkedHashMap<>();
-        MAIN_CONFIG.getCurrencyList().forEach(currency -> {
-            if (currency.equals(currencyName)) {
-                this.sqLiteHelper.getDataByString(TABLE_NAME, COLUMN_CURRENCY + " = ?", new String[]{currencyName}, MoneyData.class)
-                        .forEach(data -> map.put(data.getPlayer(), data.getMoney()));
-            }
-        });
-        return map;
+        lock.readLock().lock();
+        try {
+            LinkedHashMap<String, Double> map = new LinkedHashMap<>();
+            MAIN_CONFIG.getCurrencyList().forEach(currency -> {
+                if (currency.equals(currencyName)) {
+                    this.sqLiteHelper.getDataByString(TABLE_NAME, COLUMN_CURRENCY + " = ?", new String[]{currencyName}, MoneyData.class)
+                            .forEach(data -> map.put(data.getPlayer(), data.getMoney()));
+                }
+            });
+            return map;
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
     @Override
@@ -185,6 +236,57 @@ public class SQLiteProvider implements Provider {
         return "SQLite";
     }
 
+    @Override
+    public int setMoneyChecked(String currencyName, String id, double amount, double maxMoney) {
+        lock.writeLock().lock();
+        try {
+            MoneyData moneyData = this.getMoneyData(currencyName, id);
+            if (moneyData == null) return RET_NO_ACCOUNT;
+            if (amount > maxMoney) return RET_INVALID;
+            moneyData.setMoney(amount);
+            this.sqLiteHelper.set(TABLE_NAME, COLUMN_ID, String.valueOf(moneyData.getId()), moneyData);
+            this.cache.put(getCacheKey(currencyName, id), moneyData);
+            return RET_SUCCESS;
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    @Override
+    public int addMoneyChecked(String currencyName, String id, double amount, double maxMoney) {
+        lock.writeLock().lock();
+        try {
+            MoneyData moneyData = this.getMoneyData(currencyName, id);
+            if (moneyData == null) return RET_NO_ACCOUNT;
+            double newMoney = moneyData.getMoney() + amount;
+            if (newMoney > maxMoney) return RET_INVALID;
+            moneyData.setMoney(newMoney);
+            this.sqLiteHelper.set(TABLE_NAME, COLUMN_ID, String.valueOf(moneyData.getId()), moneyData);
+            this.cache.put(getCacheKey(currencyName, id), moneyData);
+            return RET_SUCCESS;
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    @Override
+    public int reduceMoneyChecked(String currencyName, String id, double amount) {
+        lock.writeLock().lock();
+        try {
+            MoneyData moneyData = this.getMoneyData(currencyName, id);
+            if (moneyData == null) return RET_NO_ACCOUNT;
+            double newMoney = moneyData.getMoney() - amount;
+            if (newMoney < 0) return RET_INVALID;
+            moneyData.setMoney(newMoney);
+            this.sqLiteHelper.set(TABLE_NAME, COLUMN_ID, String.valueOf(moneyData.getId()), moneyData);
+            this.cache.put(getCacheKey(currencyName, id), moneyData);
+            return RET_SUCCESS;
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    // 内部方法，调用方负责持有锁
     private MoneyData getMoneyData(String currencyName, String id) {
         String cacheKey = getCacheKey(currencyName, id);
         if (this.cache.containsKey(cacheKey)) {

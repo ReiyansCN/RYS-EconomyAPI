@@ -13,12 +13,15 @@ import me.onebone.economyapi.EconomyAPI;
 
 import java.io.File;
 import java.util.LinkedHashMap;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import static me.onebone.economyapi.EconomyAPI.MAIN_CONFIG;
 
 public class MySQLProvider implements Provider {
     private static SqlManager manager;
     private static String TABLE_NAME_PREFIX = "";
+    private final ReadWriteLock lock = new ReentrantReadWriteLock();
 
     public static void initTablePrefix(String prefix) {
         MySQLProvider.TABLE_NAME_PREFIX = prefix;
@@ -81,17 +84,27 @@ public class MySQLProvider implements Provider {
 
     @Override
     public void close() {
-        if (MySQLProvider.manager == null) return;
-        MySQLProvider.manager.disable();
+        lock.writeLock().lock();
+        try {
+            if (MySQLProvider.manager == null) return;
+            MySQLProvider.manager.disable();
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
     @Override
     public boolean accountExists(String currencyName, String id) {
-        if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return false;
-        if (MySQLProvider.manager.isExistTable(TABLE_NAME_PREFIX + currencyName)) {
-            return MySQLProvider.manager.isExistsData(TABLE_NAME_PREFIX + currencyName, "player", id);
+        lock.readLock().lock();
+        try {
+            if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return false;
+            if (MySQLProvider.manager.isExistTable(TABLE_NAME_PREFIX + currencyName)) {
+                return MySQLProvider.manager.isExistsData(TABLE_NAME_PREFIX + currencyName, "player", id);
+            }
+            return false;
+        } finally {
+            lock.readLock().unlock();
         }
-        return false;
     }
 
     @Override
@@ -101,11 +114,16 @@ public class MySQLProvider implements Provider {
 
     @Override
     public boolean removeAccount(String currencyName, String id) {
-        if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return false;
-        if (MySQLProvider.manager.isExistTable(TABLE_NAME_PREFIX + currencyName)) {
-            return MySQLProvider.manager.deleteData(TABLE_NAME_PREFIX + currencyName, new SqlData("player", id));
+        lock.writeLock().lock();
+        try {
+            if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return false;
+            if (MySQLProvider.manager.isExistTable(TABLE_NAME_PREFIX + currencyName)) {
+                return MySQLProvider.manager.deleteData(TABLE_NAME_PREFIX + currencyName, new SqlData("player", id));
+            }
+            return false;
+        } finally {
+            lock.writeLock().unlock();
         }
-        return false;
     }
 
     @Override
@@ -115,14 +133,18 @@ public class MySQLProvider implements Provider {
 
     @Override
     public boolean createAccount(String currencyName, String id, double defaultMoney) {
-        if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return false;
-        // convert money to bigint
-        long money = (long) (defaultMoney * 100);
-        if (!accountExists(currencyName, id)) {
-            SqlData sqlData = new SqlData("player", id).put("money", money);
-            return MySQLProvider.manager.insertData(TABLE_NAME_PREFIX + currencyName, sqlData);
+        lock.writeLock().lock();
+        try {
+            if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return false;
+            long money = (long) (defaultMoney * 100);
+            if (!accountExists(currencyName, id)) {
+                SqlData sqlData = new SqlData("player", id).put("money", money);
+                return MySQLProvider.manager.insertData(TABLE_NAME_PREFIX + currencyName, sqlData);
+            }
+            return false;
+        } finally {
+            lock.writeLock().unlock();
         }
-        return false;
     }
 
     @Override
@@ -132,9 +154,14 @@ public class MySQLProvider implements Provider {
 
     @Override
     public boolean setMoney(String currencyName, String id, double amount) {
-        if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return false;
-        long money = (long) (amount * 100);
-        return MySQLProvider.manager.setData(TABLE_NAME_PREFIX + currencyName, new SqlData("money", money), new SqlData("player", id));
+        lock.writeLock().lock();
+        try {
+            if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return false;
+            long money = (long) (amount * 100);
+            return MySQLProvider.manager.setData(TABLE_NAME_PREFIX + currencyName, new SqlData("money", money), new SqlData("player", id));
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
     @Override
@@ -144,9 +171,16 @@ public class MySQLProvider implements Provider {
 
     @Override
     public boolean addMoney(String currencyName, String id, double amount) {
-        if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return false;
-        long money = (long) ((getMoney(currencyName, id) + amount) * 100);
-        return MySQLProvider.manager.setData(TABLE_NAME_PREFIX + currencyName, new SqlData("money", money), new SqlData("player", id));
+        lock.writeLock().lock();
+        try {
+            if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return false;
+            double current = getMoney(currencyName, id);
+            if (current == -1) return false;
+            long money = (long) ((current + amount) * 100);
+            return MySQLProvider.manager.setData(TABLE_NAME_PREFIX + currencyName, new SqlData("money", money), new SqlData("player", id));
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
     @Override
@@ -156,9 +190,16 @@ public class MySQLProvider implements Provider {
 
     @Override
     public boolean reduceMoney(String currencyName, String id, double amount) {
-        if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return false;
-        long money = (long) ((getMoney(currencyName, id) - amount) * 100);
-        return MySQLProvider.manager.setData(TABLE_NAME_PREFIX + currencyName, new SqlData("money", money), new SqlData("player", id));
+        lock.writeLock().lock();
+        try {
+            if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return false;
+            double current = getMoney(currencyName, id);
+            if (current == -1) return false;
+            long money = (long) ((current - amount) * 100);
+            return MySQLProvider.manager.setData(TABLE_NAME_PREFIX + currencyName, new SqlData("money", money), new SqlData("player", id));
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
     @Override
@@ -168,10 +209,15 @@ public class MySQLProvider implements Provider {
 
     @Override
     public double getMoney(String currencyName, String id) {
-        if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return -1;
-        SqlDataList<SqlData> sqlDataList = MySQLProvider.manager.getData(TABLE_NAME_PREFIX + currencyName, "money", new SqlData("player", id));
-        if (sqlDataList.isEmpty()) return -1;
-        return sqlDataList.get(0).getLong("money") / 100.0;
+        lock.readLock().lock();
+        try {
+            if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return -1;
+            SqlDataList<SqlData> sqlDataList = MySQLProvider.manager.getData(TABLE_NAME_PREFIX + currencyName, "money", new SqlData("player", id));
+            if (sqlDataList.isEmpty()) return -1;
+            return sqlDataList.get(0).getLong("money") / 100.0;
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
     @Override
@@ -181,24 +227,29 @@ public class MySQLProvider implements Provider {
 
     @Override
     public LinkedHashMap<String, Double> getAll(String currencyName) {
-        LinkedHashMap<String, Double> map = new LinkedHashMap<>();
-        if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return map;
-        SqlData emptyData = new SqlData();
-        SqlDataList<SqlData> sqlDataList = MySQLProvider.manager.getData(TABLE_NAME_PREFIX + currencyName, "*", emptyData);
-        if (sqlDataList == null) {
-            return map;
-        }
-        for (SqlData sqlData : sqlDataList) {
-            LinkedHashMap<String, Object> data = sqlData.getData();
-            try {
-                String playerId = (String) data.get("player");
-                long moneyObj = (long) data.get("money");
-                map.put(playerId, moneyObj / 100.0);
-            } catch (Exception e) {
-                EconomyAPI.getInstance().getLogger().error("Error processing SqlData: " + sqlData, e);
+        lock.readLock().lock();
+        try {
+            LinkedHashMap<String, Double> map = new LinkedHashMap<>();
+            if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return map;
+            SqlData emptyData = new SqlData();
+            SqlDataList<SqlData> sqlDataList = MySQLProvider.manager.getData(TABLE_NAME_PREFIX + currencyName, "*", emptyData);
+            if (sqlDataList == null) {
+                return map;
             }
+            for (SqlData sqlData : sqlDataList) {
+                LinkedHashMap<String, Object> data = sqlData.getData();
+                try {
+                    String playerId = (String) data.get("player");
+                    long moneyObj = (long) data.get("money");
+                    map.put(playerId, moneyObj / 100.0);
+                } catch (Exception e) {
+                    EconomyAPI.getInstance().getLogger().error("Error processing SqlData: " + sqlData, e);
+                }
+            }
+            return map;
+        } finally {
+            lock.readLock().unlock();
         }
-        return map;
     }
 
     @Override
@@ -209,5 +260,52 @@ public class MySQLProvider implements Provider {
     @Override
     public String getName() {
         return "MySQL";
+    }
+
+    @Override
+    public int setMoneyChecked(String currencyName, String id, double amount, double maxMoney) {
+        lock.writeLock().lock();
+        try {
+            if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return RET_NO_ACCOUNT;
+            if (!accountExists(currencyName, id)) return RET_NO_ACCOUNT;
+            if (amount > maxMoney) return RET_INVALID;
+            long money = (long) (amount * 100);
+            MySQLProvider.manager.setData(TABLE_NAME_PREFIX + currencyName, new SqlData("money", money), new SqlData("player", id));
+            return RET_SUCCESS;
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    @Override
+    public int addMoneyChecked(String currencyName, String id, double amount, double maxMoney) {
+        lock.writeLock().lock();
+        try {
+            if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return RET_NO_ACCOUNT;
+            double current = getMoney(currencyName, id);
+            if (current == -1) return RET_NO_ACCOUNT;
+            if (current + amount > maxMoney) return RET_INVALID;
+            long money = (long) ((current + amount) * 100);
+            MySQLProvider.manager.setData(TABLE_NAME_PREFIX + currencyName, new SqlData("money", money), new SqlData("player", id));
+            return RET_SUCCESS;
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    @Override
+    public int reduceMoneyChecked(String currencyName, String id, double amount) {
+        lock.writeLock().lock();
+        try {
+            if (!MAIN_CONFIG.getCurrencyList().contains(currencyName)) return RET_NO_ACCOUNT;
+            double current = getMoney(currencyName, id);
+            if (current == -1) return RET_NO_ACCOUNT;
+            if (current - amount < 0) return RET_INVALID;
+            long money = (long) ((current - amount) * 100);
+            MySQLProvider.manager.setData(TABLE_NAME_PREFIX + currencyName, new SqlData("money", money), new SqlData("player", id));
+            return RET_SUCCESS;
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 }

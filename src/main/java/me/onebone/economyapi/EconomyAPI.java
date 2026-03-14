@@ -212,18 +212,8 @@ public class EconomyAPI extends PluginBase implements Listener {
         SetMoneyEvent event = new SetMoneyEvent(id, amount);
         this.getServer().getPluginManager().callEvent(event);
         if (!event.isCancelled() || force) {
-            if (this.provider.accountExists(id)) {
-                amount = event.getAmount();
-
-                if (amount <= this.getMaxMoney()) {
-                    this.provider.setMoney(id, amount);
-                    return RET_SUCCESS;
-                } else {
-                    return RET_INVALID;
-                }
-            } else {
-                return RET_NO_ACCOUNT;
-            }
+            return this.provider.setMoneyChecked(
+                    MAIN_CONFIG.getDefaultCurrency().getName(), id, event.getAmount(), this.getMaxMoney());
         }
         return RET_CANCELLED;
     }
@@ -271,18 +261,8 @@ public class EconomyAPI extends PluginBase implements Listener {
         AddMoneyEvent event = new AddMoneyEvent(id, amount);
         this.getServer().getPluginManager().callEvent(event);
         if (!event.isCancelled() || force) {
-            amount = event.getAmount();
-            double money;
-            if ((money = this.provider.getMoney(id)) != -1) {
-                if (money + amount > this.getMaxMoney()) {
-                    return RET_INVALID;
-                } else {
-                    this.provider.addMoney(id, amount);
-                    return RET_SUCCESS;
-                }
-            } else {
-                return RET_NO_ACCOUNT;
-            }
+            return this.provider.addMoneyChecked(
+                    MAIN_CONFIG.getDefaultCurrency().getName(), id, event.getAmount(), this.getMaxMoney());
         }
         return RET_CANCELLED;
     }
@@ -331,19 +311,8 @@ public class EconomyAPI extends PluginBase implements Listener {
         ReduceMoneyEvent event = new ReduceMoneyEvent(id, amount);
         this.getServer().getPluginManager().callEvent(event);
         if (!event.isCancelled() || force) {
-            amount = event.getAmount();
-
-            double money;
-            if ((money = this.provider.getMoney(id)) != -1) {
-                if (money - amount < 0) {
-                    return RET_INVALID;
-                } else {
-                    this.provider.reduceMoney(id, amount);
-                    return RET_SUCCESS;
-                }
-            } else {
-                return RET_NO_ACCOUNT;
-            }
+            return this.provider.reduceMoneyChecked(
+                    MAIN_CONFIG.getDefaultCurrency().getName(), id, event.getAmount());
         }
         return RET_CANCELLED;
     }
@@ -442,17 +411,7 @@ public class EconomyAPI extends PluginBase implements Listener {
         SetMoneyEvent event = new SetMoneyEvent(id, amount, currencyName);
         this.getServer().getPluginManager().callEvent(event);
         if (!event.isCancelled() || force) {
-            if (this.provider.accountExists(currencyName, id)) {
-                amount = event.getAmount();
-                if (amount <= getMaxMoney(currencyName)) {
-                    this.provider.setMoney(currencyName, id, amount);
-                    return RET_SUCCESS;
-                } else {
-                    return RET_INVALID;
-                }
-            } else {
-                return RET_NO_ACCOUNT;
-            }
+            return this.provider.setMoneyChecked(currencyName, id, event.getAmount(), getMaxMoney(currencyName));
         }
         return RET_CANCELLED;
     }
@@ -500,18 +459,7 @@ public class EconomyAPI extends PluginBase implements Listener {
         AddMoneyEvent event = new AddMoneyEvent(id, amount, currencyName);
         this.getServer().getPluginManager().callEvent(event);
         if (!event.isCancelled() || force) {
-            amount = event.getAmount();
-            double money = this.provider.getMoney(currencyName, id);
-            if (money != -1) {
-                if (money + amount > getMaxMoney(currencyName)) {
-                    return RET_INVALID;
-                } else {
-                    this.provider.addMoney(currencyName, id, amount);
-                    return RET_SUCCESS;
-                }
-            } else {
-                return RET_NO_ACCOUNT;
-            }
+            return this.provider.addMoneyChecked(currencyName, id, event.getAmount(), getMaxMoney(currencyName));
         }
         return RET_CANCELLED;
     }
@@ -559,18 +507,7 @@ public class EconomyAPI extends PluginBase implements Listener {
         ReduceMoneyEvent event = new ReduceMoneyEvent(id, amount, currencyName);
         this.getServer().getPluginManager().callEvent(event);
         if (!event.isCancelled() || force) {
-            amount = event.getAmount();
-            double money = this.provider.getMoney(currencyName, id);
-            if (money != -1) {
-                if (money - amount < 0) {
-                    return RET_INVALID;
-                } else {
-                    this.provider.reduceMoney(currencyName, id, amount);
-                    return RET_SUCCESS;
-                }
-            } else {
-                return RET_NO_ACCOUNT;
-            }
+            return this.provider.reduceMoneyChecked(currencyName, id, event.getAmount());
         }
         return RET_CANCELLED;
     }
