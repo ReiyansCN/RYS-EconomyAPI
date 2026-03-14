@@ -646,6 +646,7 @@ public class EconomyAPI extends PluginBase implements Listener {
         this.getServer().getCommandMap().register("economy", new TakeMoneyCommand(this));
         this.getServer().getCommandMap().register("economy", new PayCommand(this));
         this.getServer().getCommandMap().register("economy", new SetMoneyCommand(this));
+        this.getServer().getCommandMap().register("economy", new MigrateDataCommand(this));
     }
 
     private boolean selectProvider() {
@@ -670,6 +671,10 @@ public class EconomyAPI extends PluginBase implements Listener {
 
         this.getLogger().info("Data provider was set to: " + provider.getName());
         return true;
+    }
+
+    public Provider getProvider() {
+        return this.provider;
     }
 
     public boolean addProvider(String name, Class<? extends Provider> providerClass) {
