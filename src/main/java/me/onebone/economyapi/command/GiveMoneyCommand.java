@@ -90,15 +90,15 @@ public class GiveMoneyCommand extends PluginCommand<EconomyAPI> {
         EconomyAPI.getAsyncOperator().addMoney(player, amount, currencyName).thenAccept(result -> {
             switch (result) {
                 case EconomyAPI.RET_INVALID:
-                    sender.sendMessage(EconomyAPI.getI18n().tr(langCode, "reached-max", EconomyAPI.MONEY_FORMAT.format(finalAmount), plugin.getMonetaryUnit()));
+                    sender.sendMessage(EconomyAPI.getI18n().tr(langCode, "reached-max", EconomyAPI.MONEY_FORMAT.format(finalAmount), plugin.getMonetaryUnit(currencyName)));
                     break;
                 case EconomyAPI.RET_NO_ACCOUNT:
                     sender.sendMessage(EconomyAPI.getI18n().tr(langCode, "player-never-connected", finalPlayer));
                     break;
                 case EconomyAPI.RET_SUCCESS:
-                    sender.sendMessage(EconomyAPI.getI18n().tr(langCode, "givemoney-gave-money", finalPlayer, EconomyAPI.MONEY_FORMAT.format(finalAmount), plugin.getMonetaryUnit()));
+                    sender.sendMessage(EconomyAPI.getI18n().tr(langCode, "givemoney-gave-money", finalPlayer, EconomyAPI.MONEY_FORMAT.format(finalAmount), plugin.getMonetaryUnit(currencyName)));
                     if (p != null) {
-                        p.sendMessage(EconomyAPI.getI18n().tr(p.getLanguageCode(), "givemoney-money-given", EconomyAPI.MONEY_FORMAT.format(finalAmount), plugin.getMonetaryUnit()));
+                        p.sendMessage(EconomyAPI.getI18n().tr(p.getLanguageCode(), "givemoney-money-given", EconomyAPI.MONEY_FORMAT.format(finalAmount), plugin.getMonetaryUnit(currencyName)));
                     }
                     break;
             }
